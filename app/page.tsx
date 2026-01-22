@@ -29,6 +29,7 @@ export default function Page() {
   const [theme, setTheme] = useState("City"); // Theme State
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [showVisualizer, setShowVisualizer] = useState(false); // Visualizer Toggle State
+  const [visualizerColor, setVisualizerColor] = useState("#ffffff"); // Visualizer Color State
   const [positions, setPositions] = useState<{ [key: string]: [number, number, number] }>({
     drummer: [0, 0, -4],
     pianist: [-3, 0, -3],
@@ -140,6 +141,7 @@ export default function Page() {
         focus={focus}
         theme={theme}
         showVisualizer={showVisualizer}
+        visualizerColor={visualizerColor}
       />
 
       <audio ref={audioRef} src={audioUrl || undefined} crossOrigin="anonymous" />
@@ -160,18 +162,37 @@ export default function Page() {
             {t}
           </button>
         ))}
-        {/* Visualizer Toggle */}
-        <button
-          onClick={() => setShowVisualizer(v => !v)}
-          style={{
-            ...btnStyle,
-            background: showVisualizer ? '#d4af37' : '#333',
-            color: showVisualizer ? '#000' : '#fff',
-            marginLeft: 10
-          }}
-        >
-          👁️ Visualizer
-        </button>
+        {/* Visualizer Toggle & Color */}
+        <div style={{ display: 'flex', alignItems: 'center', background: '#333', borderRadius: 5, padding: '0 5px', marginLeft: 10, border: '1px solid #555' }}>
+          <button
+            onClick={() => setShowVisualizer(v => !v)}
+            style={{
+              ...btnStyle,
+              background: 'transparent',
+              border: 'none',
+              color: showVisualizer ? '#d4af37' : '#fff',
+              marginLeft: 0,
+              padding: '8px 5px'
+            }}
+          >
+            👁️ Visualizer
+          </button>
+          {showVisualizer && (
+            <input
+              type="color"
+              value={visualizerColor}
+              onChange={(e) => setVisualizerColor(e.target.value)}
+              style={{
+                width: 25,
+                height: 25,
+                border: 'none',
+                background: 'transparent',
+                cursor: 'pointer',
+                padding: 0
+              }}
+            />
+          )}
+        </div>
       </div>
 
       {/* Center Top: Info & Play */}

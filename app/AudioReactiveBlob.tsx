@@ -1,11 +1,8 @@
-"use client";
-
+// --- Shaders ---
 import * as THREE from "three";
-import { useFrame, extend, ReactThreeFiber } from "@react-three/fiber";
+import { useFrame, extend } from "@react-three/fiber";
 import { shaderMaterial } from "@react-three/drei";
 import { useRef, useMemo } from "react";
-
-// --- Shaders ---
 
 const vertexShader = `
   uniform float u_time;
@@ -113,8 +110,9 @@ const vertexShader = `
   }
 
   void main() {
-    float noise = 3.0 * pnoise(position + u_time, vec3(10.0));
-    float displacement = (u_frequency / 30.0) * (noise / 10.0);
+    float noise = 2.0 * pnoise(position + u_time * 0.5, vec3(10.0));
+    // Softer displacement for cloud look
+    float displacement = (u_frequency / 40.0) * (noise / 5.0); 
     vec3 newPosition = position + normal * displacement;
     gl_Position = projectionMatrix * modelViewMatrix * vec4(newPosition, 1.0);
   }
@@ -126,7 +124,8 @@ const fragmentShader = `
   uniform float u_green;
 
   void main() {
-      gl_FragColor = vec4(vec3(u_red, u_green, u_blue), 1.0);
+      // Add slight transparency for cloud effect
+      gl_FragColor = vec4(vec3(u_red, u_green, u_blue), 0.6); 
   }
 `;
 
@@ -135,9 +134,9 @@ const BlobMaterial = shaderMaterial(
   {
     u_time: 0,
     u_frequency: 0,
-    u_red: 0.5,
-    u_green: 0.0,
-    u_blue: 0.5,
+    u_red: 0.8,
+    u_green: 0.8,
+    u_blue: 0.8,
   },
   vertexShader,
   fragmentShader
@@ -145,8 +144,8 @@ const BlobMaterial = shaderMaterial(
 
 extend({ BlobMaterial });
 
-// Add types for TypeScript
-// Add types for TypeScript
+// Add types for TypeScript (blobMaterial type is handled via global declaration update below if needed, 
+// using 'any' based on previous fix)
 declare module "@react-three/fiber" {
   interface ThreeElements {
     blobMaterial: any;
@@ -155,15 +154,22 @@ declare module "@react-three/fiber" {
 
 interface AudioReactiveBlobProps {
   analyser?: AnalyserNode;
+  color?: string; // Hex color
 }
 
-export default function AudioReactiveBlob({ analyser }: AudioReactiveBlobProps) {
+export default function AudioReactiveBlob({ analyser, color = "#ffffff" }: AudioReactiveBlobProps) {
   const materialRef = useRef<THREE.ShaderMaterial>(null!);
   const dataArray = useMemo(() => new Uint8Array(128), []);
+
+  // Parse color
+  const c = useMemo(() => new THREE.Color(color), [color]);
 
   useFrame(({ clock }) => {
     if (materialRef.current) {
       materialRef.current.uniforms.u_time.value = clock.getElapsedTime();
+      materialRef.current.uniforms.u_red.value = c.r;
+      materialRef.current.uniforms.u_green.value = c.g;
+      materialRef.current.uniforms.u_blue.value = c.b;
 
       if (analyser) {
         analyser.getByteFrequencyData(dataArray);
@@ -178,14 +184,16 @@ export default function AudioReactiveBlob({ analyser }: AudioReactiveBlobProps) 
   });
 
   return (
-    <mesh position={[0, 8, -5]}>
-      <icosahedronGeometry args={[2, 30]} />
+    <mesh position={[0, 3, -1]}>
+      {/* Higher segment count (6) for smoother cloud-like surface */}
+      <icosahedronGeometry args={[2, 6]} />
       <blobMaterial
         ref={materialRef}
-        wireframe={true}
-        u_red={0.1}
-        u_green={0.8}
-        u_blue={1.0}
+        wireframe={false} // Solid for cloud
+        transparent={true} // Enable transparency
+        u_red={c.r}
+        u_green={c.g}
+        u_blue={c.b}
       />
     </mesh>
   );

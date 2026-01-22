@@ -404,6 +404,7 @@ interface BandSceneProps {
   focus: [number, number]; // New prop
   theme: string;
   showVisualizer?: boolean;
+  visualizerColor?: string;
 }
 
 function VoxelBackdrop({ theme }: { theme: string }) {
@@ -481,7 +482,7 @@ function VoxelBackdrop({ theme }: { theme: string }) {
   return null;
 }
 
-export default function BandScene({ analyser, positions, onPositionChange, onSelect, selectedId, zoom, angle, focus, theme, showVisualizer }: BandSceneProps) {
+export default function BandScene({ analyser, positions, onPositionChange, onSelect, selectedId, zoom, angle, focus, theme, showVisualizer, visualizerColor }: BandSceneProps) {
 
   // Internal drag state just for the active drag operation
   const [draggedId, setDraggedId] = useState<string | null>(null);
@@ -528,7 +529,7 @@ export default function BandScene({ analyser, positions, onPositionChange, onSel
       <SceneEffects theme={theme} />
       <FloatingNotes analyser={analyser} />
 
-      {showVisualizer && <AudioReactiveBlob analyser={analyser} />}
+      {showVisualizer && <AudioReactiveBlob analyser={analyser} color={visualizerColor} />}
 
       {/* Spotlights */}
       <spotLight position={[0, 10, 5]} intensity={200} castShadow color="#ffd700" angle={0.5} />
