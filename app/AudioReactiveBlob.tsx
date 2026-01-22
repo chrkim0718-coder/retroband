@@ -132,62 +132,61 @@ const fragmentShader = `
 
 // Declarative material
 const BlobMaterial = shaderMaterial(
-    {
-        u_time: 0,
-        u_frequency: 0,
-        u_red: 0.5,
-        u_green: 0.0,
-        u_blue: 0.5,
-    },
-    vertexShader,
-    fragmentShader
+  {
+    u_time: 0,
+    u_frequency: 0,
+    u_red: 0.5,
+    u_green: 0.0,
+    u_blue: 0.5,
+  },
+  vertexShader,
+  fragmentShader
 );
 
 extend({ BlobMaterial });
 
 // Add types for TypeScript
-declare global {
-    namespace JSX {
-        interface IntrinsicElements {
-            blobMaterial: ReactThreeFiber.Object3DNode<THREE.ShaderMaterial, typeof BlobMaterial>;
-        }
-    }
+// Add types for TypeScript
+declare module "@react-three/fiber" {
+  interface ThreeElements {
+    blobMaterial: any;
+  }
 }
 
 interface AudioReactiveBlobProps {
-    analyser?: AnalyserNode;
+  analyser?: AnalyserNode;
 }
 
 export default function AudioReactiveBlob({ analyser }: AudioReactiveBlobProps) {
-    const materialRef = useRef<THREE.ShaderMaterial>(null!);
-    const dataArray = useMemo(() => new Uint8Array(128), []);
+  const materialRef = useRef<THREE.ShaderMaterial>(null!);
+  const dataArray = useMemo(() => new Uint8Array(128), []);
 
-    useFrame(({ clock }) => {
-        if (materialRef.current) {
-            materialRef.current.uniforms.u_time.value = clock.getElapsedTime();
+  useFrame(({ clock }) => {
+    if (materialRef.current) {
+      materialRef.current.uniforms.u_time.value = clock.getElapsedTime();
 
-            if (analyser) {
-                analyser.getByteFrequencyData(dataArray);
-                // Calculate average frequency
-                const average = dataArray.reduce((prev, curr) => prev + curr, 0) / dataArray.length;
-                materialRef.current.uniforms.u_frequency.value = average;
-            } else {
-                // Auto-animate if no audio
-                materialRef.current.uniforms.u_frequency.value = (Math.sin(clock.elapsedTime) + 1) * 10;
-            }
-        }
-    });
+      if (analyser) {
+        analyser.getByteFrequencyData(dataArray);
+        // Calculate average frequency
+        const average = dataArray.reduce((prev, curr) => prev + curr, 0) / dataArray.length;
+        materialRef.current.uniforms.u_frequency.value = average;
+      } else {
+        // Auto-animate if no audio
+        materialRef.current.uniforms.u_frequency.value = (Math.sin(clock.elapsedTime) + 1) * 10;
+      }
+    }
+  });
 
-    return (
-        <mesh position={[0, 8, -5]}>
-            <icosahedronGeometry args={[2, 30]} />
-            <blobMaterial
-                ref={materialRef}
-                wireframe={true}
-                u_red={0.1}
-                u_green={0.8}
-                u_blue={1.0}
-            />
-        </mesh>
-    );
+  return (
+    <mesh position={[0, 8, -5]}>
+      <icosahedronGeometry args={[2, 30]} />
+      <blobMaterial
+        ref={materialRef}
+        wireframe={true}
+        u_red={0.1}
+        u_green={0.8}
+        u_blue={1.0}
+      />
+    </mesh>
+  );
 }
