@@ -11,6 +11,9 @@ export default function Page() {
 
   // UI State
   const [zoom, setZoom] = useState(6);
+  const [angle, setAngle] = useState(0);
+  const [focus, setFocus] = useState<[number, number]>([0, 0]); // Camera Pan Focus
+  const [theme, setTheme] = useState("City"); // Theme State
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [positions, setPositions] = useState<{ [key: string]: [number, number, number] }>({
     drummer: [0, 0, -4],
@@ -25,6 +28,16 @@ export default function Page() {
   const sourceRef = useRef<MediaElementAudioSourceNode>(null!);
   const audioRef = useRef<HTMLAudioElement>(null!);
 
+  // Pan Camera
+  const handlePan = (dx: number, dz: number) => {
+    const cos = Math.cos(angle);
+    const sin = Math.sin(angle);
+    // Pan relative to camera view
+    const rdx = dx * cos - dz * sin;
+    const rdz = dx * sin + dz * cos;
+    setFocus(prev => [prev[0] + rdx, prev[1] + rdz]);
+  };
+
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
@@ -34,24 +47,36 @@ export default function Page() {
     }
   };
 
-  const handlePlayToggle = () => {
+  const handlePlayToggle = async () => {
     if (audioRef.current) {
       if (audioRef.current.paused) {
-        audioRef.current.play();
+        try {
+          await audioRef.current.play();
+        } catch (e) {
+          console.log("Play interrupted or failed:", e);
+        }
       } else {
         audioRef.current.pause();
       }
     }
   };
 
+  // Adjust move delta based on angle rotation so controls stay intuitive (relative to camera)
+  // or keep them absolute (World Space). Keeping absolute for simplicity for now.
   const handleMove = (dx: number, dz: number) => {
     if (selectedId && positions[selectedId]) {
+      // Rotate inputs by camera angle to make movements relative to view
+      const cos = Math.cos(angle);
+      const sin = Math.sin(angle);
+      const rdx = dx * cos - dz * sin;
+      const rdz = dx * sin + dz * cos;
+
       setPositions(prev => ({
         ...prev,
         [selectedId]: [
-          prev[selectedId][0] + dx,
+          prev[selectedId][0] + rdx,
           prev[selectedId][1],
-          prev[selectedId][2] + dz
+          prev[selectedId][2] + rdz
         ]
       }));
     }
@@ -83,7 +108,7 @@ export default function Page() {
       analyserNode.connect(ctx.destination);
       sourceRef.current = source;
 
-      audioRef.current.play();
+      audioRef.current.play().catch(e => console.log("Auto-play failed:", e));
     }
   }, [audioUrl]);
 
@@ -97,38 +122,68 @@ export default function Page() {
         onSelect={setSelectedId}
         selectedId={selectedId}
         zoom={zoom}
+        angle={angle}
+        focus={focus}
+        theme={theme}
       />
 
       <audio ref={audioRef} src={audioUrl || undefined} crossOrigin="anonymous" />
       {!audioUrl && <YouTubePlayer videoId={videoId} />}
 
-      {/* Top Right: Zoom Controls */}
-      <div style={{ position: 'absolute', top: 20, right: 20, display: 'flex', gap: 5 }}>
-        <button onClick={() => setZoom(z => Math.max(2, z - 1))} style={btnStyle}>➕ Zoom In</button>
-        <button onClick={() => setZoom(z => Math.min(15, z + 1))} style={btnStyle}>➖ Zoom Out</button>
+      {/* Theme Selector (Top Left) */}
+      <div style={{ position: 'absolute', top: 20, left: 20, display: 'flex', gap: 5, zIndex: 20 }}>
+        {['City', 'Sea', 'Mountain', 'River', 'Nightclub'].map(t => (
+          <button
+            key={t}
+            onClick={() => setTheme(t)}
+            style={{
+              ...btnStyle,
+              background: theme === t ? '#d4af37' : '#333',
+              color: theme === t ? '#000' : '#fff'
+            }}
+          >
+            {t}
+          </button>
+        ))}
       </div>
 
-      {/* Center Top: Info */}
-      <div style={{ position: 'absolute', top: 20, left: '50%', transform: 'translateX(-50%)', textAlign: 'center', pointerEvents: 'none' }}>
+      {/* Center Top: Info & Play */}
+      <div style={{ position: 'absolute', top: 20, left: '50%', transform: 'translateX(-50%)', textAlign: 'center', pointerEvents: 'none', zIndex: 10 }}>
         <h1 style={{ margin: 0, fontSize: '1.2rem', textShadow: '0 0 10px black' }}>RETRO BAND PLAYER</h1>
-        <p style={{ margin: 0, fontSize: '0.8rem', opacity: 0.7 }}>Click character to select &rarr; Drag or use Arrows</p>
+        <p style={{ margin: '5px 0', fontSize: '0.8rem', opacity: 0.7 }}>Click &rarr; Control</p>
+
+        {/* Play Button Moved Here */}
+        <div style={{ pointerEvents: 'auto', marginTop: 10 }}>
+          <button onClick={handlePlayToggle} style={{ ...btnStyle, fontSize: '1.2rem', padding: '8px 25px', background: '#d4af37', color: '#000', boxShadow: '0 0 10px rgba(212, 175, 55, 0.5)' }}>
+            ▶ / ⏸ PLAY
+          </button>
+        </div>
       </div>
 
-      {/* Bottom Center: Play/Stop */}
-      <div style={{ position: 'absolute', bottom: 100, left: '50%', transform: 'translateX(-50%)' }}>
-        <button onClick={handlePlayToggle} style={{ ...btnStyle, fontSize: '1.5rem', padding: '10px 30px', background: '#d4af37', color: '#000' }}>
-          ▶ / ⏸
-        </button>
+      {/* Top Right: Zoom & Rotate Controls */}
+      <div style={{ position: 'absolute', top: 20, right: 20, display: 'flex', flexDirection: 'column', gap: 10, alignItems: 'flex-end' }}>
+        <div style={{ display: 'flex', gap: 5 }}>
+          <button onClick={() => setZoom(z => Math.max(2, z - 1))} style={btnStyle}>➕ Zoom In</button>
+          <button onClick={() => setZoom(z => Math.min(15, z + 1))} style={btnStyle}>➖ Zoom Out</button>
+        </div>
+        <div style={{ display: 'flex', gap: 5 }}>
+          <button onClick={() => setAngle(a => a - 0.2)} style={btnStyle}>↺ Rotate Left</button>
+          <button onClick={() => setAngle(a => a + 0.2)} style={btnStyle}>↻ Rotate Right</button>
+        </div>
       </div>
 
-      {/* Bottom Right: D-Pad */}
+      {/* Bottom Right: D-Pad (Camera Pan) */}
       <div style={{ position: 'absolute', bottom: 20, right: 20, display: 'grid', gridTemplateColumns: '40px 40px 40px', gridTemplateRows: '40px 40px', gap: 5 }}>
         <div />
-        <button onClick={() => handleMove(0, -0.5)} style={btnStyle}>▲</button>
+        {/* Up: Pan Forward */}
+        <button onClick={() => handlePan(0, -1)} style={btnStyle}>▲</button>
         <div />
-        <button onClick={() => handleMove(-0.5, 0)} style={btnStyle}>◀</button>
-        <button onClick={() => handleMove(0, 0.5)} style={btnStyle}>▼</button>
-        <button onClick={() => handleMove(0.5, 0)} style={btnStyle}>▶</button>
+        {/* Left: Pan Left */}
+        <button onClick={() => handlePan(-1, 0)} style={btnStyle}>◀</button>
+        {/* Down: Pan Backward */}
+        <button onClick={() => handlePan(0, 1)} style={btnStyle}>▼</button>
+        {/* Right: Pan Right */}
+        <button onClick={() => handlePan(1, 0)} style={btnStyle}>▶</button>
       </div>
 
       {/* Bottom Left: Files */}
@@ -177,5 +232,6 @@ const btnStyle = {
   padding: '8px 12px',
   cursor: 'pointer',
   userSelect: 'none' as const,
-  fontWeight: 'bold'
+  fontWeight: 'bold',
+  fontSize: '0.9rem'
 };
