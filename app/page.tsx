@@ -247,9 +247,9 @@ export default function Page() {
           />
         </div>
       </div>
-    </div>
 
-      {/* Mobile Landscape Overlay */ }
+
+      {/* Mobile Landscape Overlay */}
       <div className="mobile-overlay">
         <div style={{ textAlign: 'center' }}>
           <div style={{ fontSize: '3rem', marginBottom: 20 }}>↻</div>
@@ -278,7 +278,7 @@ export default function Page() {
             display: flex;
           }
         }
-      </style>
+      `}</style>
     </div>
   );
 }
