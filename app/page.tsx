@@ -4,6 +4,19 @@ import BandScene from "./BandScene";
 import YouTubePlayer from "./YouTubePlayer";
 import { useState, useRef, useEffect } from "react";
 
+
+const btnStyle = {
+  background: '#333',
+  border: '1px solid #555',
+  color: 'white',
+  borderRadius: 5,
+  padding: '8px 12px',
+  cursor: 'pointer',
+  userSelect: 'none' as const,
+  fontWeight: 'bold',
+  fontSize: '0.9rem'
+};
+
 export default function Page() {
   const [videoId, setVideoId] = useState("dQw4w9WgXcQ");
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
@@ -15,6 +28,7 @@ export default function Page() {
   const [focus, setFocus] = useState<[number, number]>([0, 0]); // Camera Pan Focus
   const [theme, setTheme] = useState("City"); // Theme State
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [showVisualizer, setShowVisualizer] = useState(false); // Visualizer Toggle State
   const [positions, setPositions] = useState<{ [key: string]: [number, number, number] }>({
     drummer: [0, 0, -4],
     pianist: [-3, 0, -3],
@@ -125,6 +139,7 @@ export default function Page() {
         angle={angle}
         focus={focus}
         theme={theme}
+        showVisualizer={showVisualizer}
       />
 
       <audio ref={audioRef} src={audioUrl || undefined} crossOrigin="anonymous" />
@@ -145,6 +160,18 @@ export default function Page() {
             {t}
           </button>
         ))}
+        {/* Visualizer Toggle */}
+        <button
+          onClick={() => setShowVisualizer(v => !v)}
+          style={{
+            ...btnStyle,
+            background: showVisualizer ? '#d4af37' : '#333',
+            color: showVisualizer ? '#000' : '#fff',
+            marginLeft: 10
+          }}
+        >
+          👁️ Visualizer
+        </button>
       </div>
 
       {/* Center Top: Info & Play */}
@@ -221,17 +248,39 @@ export default function Page() {
         </div>
       </div>
     </div>
+
+      {/* Mobile Landscape Overlay */ }
+      <div className="mobile-overlay">
+        <div style={{ textAlign: 'center' }}>
+          <div style={{ fontSize: '3rem', marginBottom: 20 }}>↻</div>
+          <h2>Please Rotate Your Device</h2>
+          <p>This experience is best viewed in landscape mode.</p>
+        </div>
+      </div>
+
+      <style jsx global>{`
+        .mobile-overlay {
+          display: none;
+          position: fixed;
+          top: 0;
+          left: 0;
+          width: 100vw;
+          height: 100vh;
+          background: #111;
+          color: white;
+          z-index: 9999;
+          align-items: center;
+          justify-content: center;
+          flex-direction: column;
+        }
+        @media screen and (orientation: portrait) and (max-width: 768px) {
+          .mobile-overlay {
+            display: flex;
+          }
+        }
+      </style>
+    </div>
   );
 }
 
-const btnStyle = {
-  background: '#333',
-  border: '1px solid #555',
-  color: 'white',
-  borderRadius: 5,
-  padding: '8px 12px',
-  cursor: 'pointer',
-  userSelect: 'none' as const,
-  fontWeight: 'bold',
-  fontSize: '0.9rem'
-};
+

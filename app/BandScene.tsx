@@ -3,6 +3,7 @@
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import { MeshReflectorMaterial, Environment } from "@react-three/drei";
 import { VoxelPart } from "./VoxelCharacter";
+import AudioReactiveBlob from "./AudioReactiveBlob";
 import {
   DRUMMER_BODY, DRUMMER_ARM_L, DRUMMER_ARM_R, DRUMMER_LEG_L, DRUMMER_LEG_R, INSTRUMENT_DRUMS,
   GUITARIST_BODY, GUITARIST_ARM_R, INSTRUMENT_GUITAR,
@@ -12,6 +13,28 @@ import {
 } from "./models";
 import { useRef, useMemo, useState, useEffect } from "react";
 import * as THREE from "three";
+
+// --- Audio Analysis Helper ---
+const getFrequencyBands = (analyser: AnalyserNode, dataArray: any) => {
+  analyser.getByteFrequencyData(dataArray);
+
+  // Bass: 0~10 index avg normalized to 0~100 (User Request)
+  let bass = 0;
+  for (let i = 0; i < 10; i++) bass += dataArray[i];
+  bass /= 10 * 2.55;
+
+  // Mid: 20~50 index avg normalized
+  let mid = 0;
+  for (let i = 20; i < 50; i++) mid += dataArray[i];
+  mid /= 30 * 2.55;
+
+  // High: 80+ index avg normalized
+  let high = 0;
+  for (let i = 80; i < dataArray.length; i++) high += dataArray[i];
+  high /= (dataArray.length - 80) * 2.55;
+
+  return { bass, mid, high };
+};
 
 // --- Camera Controller ---
 function CameraController({ zoom, angle, focus }: { zoom: number, angle: number, focus: [number, number] }) {
@@ -59,6 +82,69 @@ function SceneEffects({ theme }: { theme: string }) {
   );
 }
 
+// --- Floating Notes Effect ---
+import { Text } from "@react-three/drei";
+
+function FloatingNotes({ analyser }: { analyser?: AnalyserNode }) {
+  const [notes, setNotes] = useState<{ id: number, x: number, y: number, z: number, opacity: number, vel: number }[]>([]);
+  const frameRef = useRef(0);
+  const dataArray = useMemo(() => new Uint8Array(128), []);
+
+  useFrame(({ clock }) => {
+    // Spawn notes based on kick/bass
+    let spawn = false;
+    if (analyser) {
+      analyser.getByteFrequencyData(dataArray);
+      // Check bass frequencies for kick
+      const bass = dataArray.slice(0, 10).reduce((a, b) => a + b, 0) / 10;
+      if (bass > 200 && Math.random() > 0.8) spawn = true;
+    } else {
+      // Auto pattern if no audio
+      if (Math.random() > 0.97) spawn = true;
+    }
+
+    if (spawn) {
+      const id = Date.now() + Math.random();
+      setNotes(prev => [
+        ...prev,
+        {
+          id,
+          x: (Math.random() - 0.5) * 8, // Random width across stage
+          y: 0,
+          z: (Math.random() - 0.5) * 4 - 2,
+          opacity: 1,
+          vel: 0.02 + Math.random() * 0.03
+        }
+      ]);
+    }
+
+    // Update notes
+    setNotes(prev => prev.map(n => ({
+      ...n,
+      y: n.y + n.vel,
+      opacity: n.opacity - 0.01
+    })).filter(n => n.opacity > 0));
+  });
+
+  return (
+    <group>
+      {notes.map(n => (
+        <Text
+          key={n.id}
+          position={[n.x, n.y, n.z]}
+          fontSize={0.5}
+          color="#FFD700"
+          anchorX="center"
+          anchorY="middle"
+          fillOpacity={n.opacity}
+        >
+          {Math.random() > 0.5 ? "♪" : "♫"}
+        </Text>
+      ))}
+    </group>
+  );
+}
+
 // --- Character Components ---
 function Drummer({ analyser, position, onPointerDown, isSelected }: any) {
   const leftArm = useRef<THREE.Group>(null!);
@@ -68,25 +154,30 @@ function Drummer({ analyser, position, onPointerDown, isSelected }: any) {
   const dataArray = useMemo(() => new Uint8Array(128), []);
 
   useFrame(({ clock }) => {
-    let intensity = 0;
-    let kick = 0;
+    let bass = 0;
+
     if (analyser) {
-      analyser.getByteFrequencyData(dataArray);
-      intensity = dataArray.slice(10, 20).reduce((a, b) => a + b, 0) / 10 / 255;
-      kick = dataArray.slice(0, 5).reduce((a, b) => a + b, 0) / 5 / 255;
+      const bands = getFrequencyBands(analyser, dataArray);
+      bass = bands.bass;
     } else {
+      // Auto animation
       const t = clock.elapsedTime * 4;
-      intensity = (Math.sin(t) + 1) / 2;
-      kick = (Math.cos(t) + 1) / 2;
+      bass = (Math.cos(t) + 1) * 30; // Simulate ~60 value
     }
+
+    // Apply animation based on normalized 0-100 value
+    // Scale down significantly for 3D scene (100 -> ~1.0 or less)
+    const intensity = bass * 0.01;
+
     // Boosted Intensity
     if (leftArm.current) leftArm.current.rotation.x = -intensity * 2.5;
     if (rightArm.current) rightArm.current.rotation.x = -intensity * 2.5;
-    if (rightLeg.current) rightLeg.current.rotation.x = -kick * 0.8;
+    if (rightLeg.current) rightLeg.current.rotation.x = -intensity * 1.5;
 
-    // Body Bounce
+    // Body Bounce (User Request: bounce with bass)
     if (bodyGroup.current) {
-      bodyGroup.current.position.y = Math.sin(clock.elapsedTime * 10) * 0.05 * (analyser ? 1 : 0);
+      // Reduced multiplier from 0.5 to 0.02 to fit scene scale
+      bodyGroup.current.position.y = Math.sin(clock.elapsedTime * 20 + bass * 0.1) * bass * 0.005;
     }
   });
 
@@ -120,18 +211,30 @@ function Guitarist({ analyser, position, onPointerDown, isSelected }: any) {
   const dataArray = useMemo(() => new Uint8Array(128), []);
 
   useFrame(({ clock }) => {
-    let intensity = 0;
+    let mid = 0;
+    let high = 0;
+
     if (analyser) {
-      analyser.getByteFrequencyData(dataArray);
-      intensity = dataArray.slice(30, 50).reduce((a, b) => a + b, 0) / 20 / 255;
+      const bands = getFrequencyBands(analyser, dataArray);
+      mid = bands.mid;
+      high = bands.high;
     } else {
-      intensity = (Math.sin(clock.elapsedTime * 8) + 1) / 2;
+      mid = (Math.sin(clock.elapsedTime * 8) + 1) * 40;
     }
+
+    const intensity = mid * 0.01;
+    const shake = high * 0.01;
+
     if (rightArm.current) {
-      rightArm.current.rotation.z = Math.sin(clock.elapsedTime * 15) * 0.8 * intensity;
+      // Strumming
+      rightArm.current.rotation.z = Math.sin(clock.elapsedTime * 15) * 0.8 * intensity + (shake * 0.2);
       rightArm.current.rotation.x = 0.3;
     }
-    if (body.current) body.current.rotation.z = Math.sin(clock.elapsedTime * 4) * 0.2 * intensity;
+    if (body.current) {
+      // Sway to Mid/High
+      body.current.rotation.z = Math.sin(clock.elapsedTime * 4) * 0.2 * intensity;
+      body.current.rotation.y = Math.sin(clock.elapsedTime * 2) * 0.1 * shake;
+    }
   });
 
   return (
@@ -161,14 +264,21 @@ function Bassist({ analyser, position, onPointerDown, isSelected }: any) {
   const dataArray = useMemo(() => new Uint8Array(128), []);
 
   useFrame(({ clock }) => {
-    let intensity = 0;
+    let bass = 0;
+    let mid = 0;
+
     if (analyser) {
-      analyser.getByteFrequencyData(dataArray);
-      intensity = dataArray.slice(0, 10).reduce((a, b) => a + b, 0) / 10 / 255;
+      const bands = getFrequencyBands(analyser, dataArray);
+      bass = bands.bass;
+      mid = bands.mid;
     } else {
-      intensity = (Math.sin(clock.elapsedTime * 4) + 1) / 2;
+      bass = (Math.sin(clock.elapsedTime * 4) + 1) * 40;
     }
-    if (rightArm.current) rightArm.current.rotation.z = Math.sin(clock.elapsedTime * 8) * 0.3 * intensity;
+
+    const intensity = bass * 0.01;
+    const strum = mid * 0.005;
+
+    if (rightArm.current) rightArm.current.rotation.z = Math.sin(clock.elapsedTime * 8) * 0.3 * intensity + strum;
     if (body.current) body.current.rotation.x = Math.sin(clock.elapsedTime * 8) * 0.1 * intensity;
   });
 
@@ -200,13 +310,20 @@ function Pianist({ analyser, position, onPointerDown, isSelected }: any) {
 
   useFrame(({ clock }) => {
     const t = clock.elapsedTime;
-    let act = 0;
+    let mid = 0;
+    let high = 0;
+
     if (analyser) {
-      analyser.getByteFrequencyData(dataArray);
-      act = dataArray[40] / 255;
+      const bands = getFrequencyBands(analyser, dataArray);
+      mid = bands.mid;
+      high = bands.high;
     } else {
-      act = 0.5;
+      mid = 50;
+      high = 30;
     }
+
+    const act = (mid + high) * 0.005;
+
     if (leftHand.current) leftHand.current.position.y = Math.sin(t * 10) * 0.05 * act;
     if (rightHand.current) rightHand.current.position.y = Math.cos(t * 12) * 0.05 * act;
   });
@@ -240,10 +357,10 @@ function Vocalist({ analyser, position, onPointerDown, isSelected }: any) {
   useFrame(({ clock }) => {
     let val = 0;
     if (analyser) {
-      analyser.getByteFrequencyData(dataArray);
-      val = dataArray.slice(20, 100).reduce((a, b) => a + b, 0) / 80 / 255;
+      const bands = getFrequencyBands(analyser, dataArray);
+      val = (bands.mid + bands.high) * 0.005; // Average intensity scaled down
     } else {
-      val = (Math.sin(clock.elapsedTime * 2) + 1) / 2;
+      val = (Math.sin(clock.elapsedTime * 2) + 1) * 0.5;
     }
 
     if (body.current) {
@@ -286,6 +403,7 @@ interface BandSceneProps {
   angle: number;
   focus: [number, number]; // New prop
   theme: string;
+  showVisualizer?: boolean;
 }
 
 function VoxelBackdrop({ theme }: { theme: string }) {
@@ -363,7 +481,7 @@ function VoxelBackdrop({ theme }: { theme: string }) {
   return null;
 }
 
-export default function BandScene({ analyser, positions, onPositionChange, onSelect, selectedId, zoom, angle, focus, theme }: BandSceneProps) {
+export default function BandScene({ analyser, positions, onPositionChange, onSelect, selectedId, zoom, angle, focus, theme, showVisualizer }: BandSceneProps) {
 
   // Internal drag state just for the active drag operation
   const [draggedId, setDraggedId] = useState<string | null>(null);
@@ -408,6 +526,9 @@ export default function BandScene({ analyser, positions, onPositionChange, onSel
       <Environment preset={themeConfig.preset} />
       <VoxelBackdrop theme={theme} />
       <SceneEffects theme={theme} />
+      <FloatingNotes analyser={analyser} />
+
+      {showVisualizer && <AudioReactiveBlob analyser={analyser} />}
 
       {/* Spotlights */}
       <spotLight position={[0, 10, 5]} intensity={200} castShadow color="#ffd700" angle={0.5} />
