@@ -2,10 +2,7 @@
 
 import { useMemo } from "react";
 import * as THREE from "three";
-import { VoxelData } from "./models"; // Circular dependency? models depends on this type. 
-// Actually usually types should be in a separate file or models imports from here. 
-// Let's fix models import in next step if generic type is moved, or just redefine/export it here.
-// In models.ts we imported VoxelData from here. So we must keep the type export.
+
 
 export type VoxelData = {
     x: number;
